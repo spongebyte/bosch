@@ -47,7 +47,7 @@ async def main():
     device = await BleakScanner.find_device_by_address(DEVICE_MAC, timeout=5, cb=dict(use_bdaddr=True))
     if device is None:
         print(f"could not find device with address {DEVICE_MAC}")
-        exit(0)
+        return
 
     print("connecting to device...")
     async with BleakClient(device) as client:
