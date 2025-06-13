@@ -32,7 +32,7 @@ def notification_handler(char: BleakGATTCharacteristic, data: bytearray):
     print(data_str)
 
     val = {}
-    for idx, start_pos in enumerate(range(7, 20, 4)):
+    for idx, start_pos in enumerate(range(7, 19, 4)):
         try:
             val[idx] = str(round(struct.unpack("<f", data[start_pos : start_pos + 4])[0] * 1000))
             print(f"val {idx}: {val[idx]}")
