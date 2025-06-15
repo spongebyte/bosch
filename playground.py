@@ -87,7 +87,7 @@ async def main():
 
             global mode_hunt
             await client.write_gatt_char(CHAR_UUID, mode_hunt.to_bytes(6), True)
-            if mode_hunt % 255 == 0:
+            if mode_hunt % 256 == 0:
                 print(hex(mode_hunt))
             mode_hunt += 1
             # await asyncio.sleep(0.1)
