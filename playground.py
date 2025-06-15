@@ -11,35 +11,50 @@ with open("mac_address.txt", "r") as fp:
     DEVICE_MAC = fp.read().strip()
 
 CHAR_UUID = "02a6c0d1-0451-4000-b000-fb3210111989"
-PAYLOADS = {
+RESPONSES = {
     "keepalive": "c011003a",
-    "output_on": "c0550201001a",
-    "angle_mode": "c05502f108ac",
-    "distance_mode": "c05502f101ee",
-    "trigger": "c05601001e",
+    "invalid_request": "03000a",
 }
+PAYLOADS = {
+    "output_on": "c0550201001a",
+    "trigger": "c05601001e",
+    "mode_bubble": "c05502f108ac",
+    "mode_distance": "c05502f101ee",
+    "mode_continuous": "c05502f102a2",
+}
+payloads_idx_tr = {idx: payload_name for idx, payload_name in enumerate(PAYLOADS)}
 
-
-def payload(_payload):
-    return bytes.fromhex(PAYLOADS[_payload])
+mode_hunt = 0xC05502F10000
 
 
 def notification_handler(char: BleakGATTCharacteristic, data: bytearray):
-    if data == payload("keepalive"):
+    if data == bytes.fromhex(RESPONSES["keepalive"]):
+        return
+
+    if data == bytes.fromhex(RESPONSES["invalid_request"]):
+        print("x", end="", flush=True)
         return
 
     data_str = "0x " + " ".join([f"{byte:02x}" for byte in data])
+    # print("   const ?  mode? count measure1    measure2    measure3    ck")
+    # print("   ----- -- ----- ----- ----------- ----------- ----------- --")
     print(data_str)
 
-    val = {}
-    for idx, start_pos in enumerate(range(7, 19, 4)):
-        try:
-            val[idx] = str(round(struct.unpack("<f", data[start_pos : start_pos + 4])[0] * 1000))
-            print(f"val {idx}: {val[idx]}")
-        except struct.error:
-            pass
+    # try:
+    #     cnt = struct.unpack("<H", data[5:7])[0]
+    #     print(f"cnt: {cnt}")
+    # except struct.error:
+    #     pass
 
-    print("------------------------------------------------")
+    # val = {}
+    # for idx, start_pos in enumerate(range(7, 19, 4)):
+    #     try:
+    #         val[idx] = struct.unpack("<f", data[start_pos : start_pos + 4])[0]
+    #         print(f"val {idx}: {val[idx]}")
+    #     except struct.error:
+    #         pass
+
+    # print("------------------------------------------------")
 
 
 async def main():
@@ -54,22 +69,26 @@ async def main():
         print("connected")
         await client.start_notify(CHAR_UUID, notification_handler)
 
-        await client.write_gatt_char(CHAR_UUID, payload("output_on"), True)
+        await client.write_gatt_char(CHAR_UUID, bytes.fromhex(PAYLOADS["output_on"]), True)
         # or explicitly setting a mode will enable indications
-        # await client.write_gatt_char(CHAR_UUID, payload("distance_mode"), True)
-        # await client.write_gatt_char(CHAR_UUID, payload("angle_mode"), True)
 
         while client.is_connected:
-            user_input = input("adx? ")
-            match user_input:
-                case "a":
-                    await client.write_gatt_char(CHAR_UUID, payload("angle_mode"), True)
-                case "d":
-                    await client.write_gatt_char(CHAR_UUID, payload("distance_mode"), True)
-                case "x":
-                    await client.write_gatt_char(CHAR_UUID, payload("trigger"), True)
+            # for idx, payload_name in payloads_idx_tr.items():
+            #     print(f"{idx}\t{payload_name}")
+            # try:
+            #     user_input = input("idx: ")
+            #     if user_input == "q":
+            #         return
+            #     else:
+            #         user_input = int(user_input)
+            #         await client.write_gatt_char(CHAR_UUID, bytes.fromhex(PAYLOADS[payloads_idx_tr[user_input]]), True)
+            # except:
+            #     print("")
 
-            # await asyncio.sleep(1)
+            global mode_hunt
+            await client.write_gatt_char(CHAR_UUID, mode_hunt.to_bytes(6), True)
+            mode_hunt += 1
+            # await asyncio.sleep(0.1)
 
 
 if __name__ == "__main__":
