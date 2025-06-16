@@ -57,6 +57,9 @@ def notification_handler(char: BleakGATTCharacteristic, data: bytearray):
         f"\t\t\t{data_header_hex}\t{data_mode_hex}\t{data_count}\t{val.get(0):.3f}\t{val.get(1):.3f}\t{val.get(2):.3f}"
     )
 
+    if measure_type == "wall_area":
+        state["delayed_measure_requested"] = True
+
 
 async def main():
     print("starting scan... ", end="", flush=True)
@@ -79,25 +82,19 @@ async def main():
         # just to make sure that the first "send payload" message doesn't come too early
 
         while client.is_connected:
-            for idx, mode_name in PAYLOADS_TR.items():
-                print(f"{idx:2}: {mode_name}")
-            user_input = await prompt_session.prompt_async("hex payload, index number, or x: ")
-
-            if user_input.isdigit() and len(user_input) <= 2:
-                chosen_mode = PAYLOADS_TR[int(user_input)]
-                await client.write_gatt_char(CHAR_UUID, bytes.fromhex(PAYLOADS[chosen_mode]), True)
-            else:
-                try:
-                    hex_input = bytes.fromhex(user_input)
-                    if not hex_input:
-                        raise ValueError
-                    await client.write_gatt_char(CHAR_UUID, hex_input, True)
-                except ValueError:
-                    if user_input in ["x", "."]:
-                        await client.write_gatt_char(CHAR_UUID, bytes.fromhex(PAYLOADS["trigger"]), True)
-                    else:
-                        pass
+            if state["delayed_measure_requested"]:
+                print("delayed_measure_requested")
+                await client.write_gatt_char(CHAR_UUID, bytes.fromhex(PAYLOADS["indirect_bottom"]), True)
+                await client.write_gatt_char(CHAR_UUID, bytes.fromhex(PAYLOADS["trigger"]), True)
+                await asyncio.sleep(3)
+                await client.write_gatt_char(CHAR_UUID, bytes.fromhex(PAYLOADS["trigger"]), True)
+                await asyncio.sleep(1)
+                await client.write_gatt_char(CHAR_UUID, bytes.fromhex(PAYLOADS["wall_area"]), True)
+                await client.write_gatt_char(CHAR_UUID, bytes.fromhex(PAYLOADS["trigger"]), True)
+                state["delayed_measure_requested"] = False
+            await asyncio.sleep(0.1)
 
 
 if __name__ == "__main__":
+    state = {"delayed_measure_requested": False}
     asyncio.run(main())
