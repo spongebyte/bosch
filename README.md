@@ -6,7 +6,7 @@
     - I scripted sending all codes from `0000` to `ffff`.
     - Through a mix of triggering a few measures at every `..ff` or by listening to responses (unreliable as the device doesn't always report data when changing modes...), I was able to detect which ranges caused a mode change.
     - Slower and more manual check in affected ranges let me figure out the exact payloads.
-    - There might be modes that I haven't caught.
+    - There might be trigger codes that I haven't caught.
 * Measure "discovery" was done doing this:
     - Sending a trigger signal a few times within each mode.
 * DIY delayed mode:
