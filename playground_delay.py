@@ -18,47 +18,58 @@ from device_specs import (
 )
 
 
+def response_parser(data: bytearray) -> tuple[dict, str | None]:
+    data_str = data.hex()
+
+    status = next((RESPONSES["status"][code] for code in RESPONSES["status"] if data_str.startswith(code)), None)
+
+    response = {
+        "header": data_str[:6],
+        "type": data_str[6:8],
+        "subtype": data_str[8:10],
+        "count": -1,
+        "val0": -1,
+        "val1": -1,
+        "val2": -1,
+        "measure_type": RESPONSES["measure"].get(data_str[:8]),
+    }
+
+    if len(data[5:7]) == 2:
+        response["count"] = struct.unpack("<H", data[5:7])[0]
+    if len(data[7:11]) == 4:
+        response["val0"] = struct.unpack("<f", data[7:11])[0]
+    if len(data[11:15]) == 4:
+        response["val1"] = struct.unpack("<f", data[11:15])[0]
+    if len(data[15:19]) == 4:
+        response["val2"] = struct.unpack("<f", data[15:19])[0]
+
+    return response, status
+
+
 def notification_handler(char: BleakGATTCharacteristic, data: bytearray):
-    data_str = "".join(f"{byte:02x}" for byte in data)
-    if data_str in RESPONSES["noise"]:
-        # print(f"{data_str}\t{RESPONSES['noise'][data_str]}")
+    response, status = response_parser(data)
+
+    if status in ["keepalive", "invalid_request"]:
         return
 
-    try:
-        data_header_hex = "".join([f"{byte:02x}" for byte in data[:3]])
-    except IndexError:
-        data_header_hex = -1
+    print("\n", end="")
+    if status:
+        print(f"\tpotential status: {status.upper()}")
 
-    try:
-        data_mode_hex = "".join([f"{byte:02x}" for byte in data[3:5]])
-    except IndexError:
-        data_mode_hex = -1
-
-    try:
-        data_count = struct.unpack("<H", data[5:7])[0]
-    except struct.error:
-        data_count = -1
-
-    val = {}
-    for idx, start_pos in enumerate(range(7, 19, 4)):
-        try:
-            val[idx] = struct.unpack("<f", data[start_pos : start_pos + 4])[0]
-        except struct.error:
-            val[idx] = -1
-
-    data_hex = "".join([f"{byte:02x}" for byte in data])
-
-    print()
-    if measure_type := RESPONSES["measures"].get(data_mode_hex):
-        print(f"\t\t\tthis was a {measure_type} measurement")
-    print(f"\t\t\traw response: {data_hex}")
-    print("\t\t\theader\tmode\tcount\tval1\tval2\tval3")
-    print(
-        f"\t\t\t{data_header_hex}\t{data_mode_hex}\t{data_count}\t{val.get(0):.3f}\t{val.get(1):.3f}\t{val.get(2):.3f}"
-    )
-
-    if measure_type == "wall_area":
+    if response["measure_type"] == "wall_area":
+        print(f"\tthat was a wall_area request, toggling `delayed_measure_requested` to True")
         state["delayed_measure_requested"] = True
+
+    if response["measure_type"]:
+        print(f"\tmeasure type: {response['measure_type'].upper()}")
+
+    data_hex = data.hex()
+
+    print(f"\t\t{data_hex}")
+    print("\t\theader\ttype\tsub\tcount\tval1\tval2\tval3")
+    print(
+        f"\t\t{response['header']}\t{response['type']}\t{response['subtype']}\t{response['count']}\t{response['val0']:.3f}\t{response['val1']:.3f}\t{response['val2']:.3f}"
+    )
 
 
 async def main():
@@ -78,23 +89,26 @@ async def main():
         await client.write_gatt_char(CHAR_UUID, bytes.fromhex(PAYLOADS["output_on"]), True)
         # or explicitly setting a mode will enable indications
 
+        await client.write_gatt_char(CHAR_UUID, bytes.fromhex(PAYLOADS["wall_area"]), True)
+
         await asyncio.sleep(0.5)
         # just to make sure that the first "send payload" message doesn't come too early
 
         while client.is_connected:
             if state["delayed_measure_requested"]:
-                print("delayed_measure_requested")
+                print("\tdelayed_measure_requested")
                 await client.write_gatt_char(CHAR_UUID, bytes.fromhex(PAYLOADS["indirect_bottom"]), True)
                 await client.write_gatt_char(CHAR_UUID, bytes.fromhex(PAYLOADS["trigger"]), True)
                 await asyncio.sleep(3)
                 await client.write_gatt_char(CHAR_UUID, bytes.fromhex(PAYLOADS["trigger"]), True)
                 await asyncio.sleep(1)
                 await client.write_gatt_char(CHAR_UUID, bytes.fromhex(PAYLOADS["wall_area"]), True)
-                await client.write_gatt_char(CHAR_UUID, bytes.fromhex(PAYLOADS["trigger"]), True)
                 state["delayed_measure_requested"] = False
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.05)
 
 
 if __name__ == "__main__":
-    state = {"delayed_measure_requested": False}
+    state = {
+        "delayed_measure_requested": False,
+    }
     asyncio.run(main())
